@@ -125,6 +125,7 @@ public class ReachabilityEngine {
 		for (;;) {
 			System.out.print(">");
 			final String q = br.readLine();
+			if (q == null) break;
 			if (q.length() == 0) continue;
 			if (q.charAt(0) == '$') {
 				if ("$quit".equals(q)) {
@@ -132,12 +133,14 @@ public class ReachabilityEngine {
 					break;
 				} else if (q.startsWith("$revision")) {
 					final String[] name = q.split("[ ]+");
-					if (name.length == 1) {
+					if (name.length < 3) {
 						System.err.println("Missing package name or version");
 						continue;
 					}
-					System.err.println("Selecting package " + name[0]);
-					System.err.println(connector.select(Packages.PACKAGES.PACKAGE_NAME, PackageVersions.PACKAGE_VERSIONS.VERSION).from(Packages.PACKAGES).join(PackageVersions.PACKAGE_VERSIONS).on(PackageVersions.PACKAGE_VERSIONS.ID.eq(Packages.PACKAGES.ID)).where(Packages.PACKAGES.PACKAGE_NAME.equal(name[0])).fetch());
+					System.err.println("Selecting package " + name[1] + ", version " + name[2]);
+//					System.err.println(connector.select(Packages.PACKAGES.PACKAGE_NAME, PackageVersions.PACKAGE_VERSIONS.VERSION).from(Packages.PACKAGES).join(PackageVersions.PACKAGE_VERSIONS).on(PackageVersions.PACKAGE_VERSIONS.ID.eq(Packages.PACKAGES.ID)).fetch());
+					System.err.println(connector.select(PackageVersions.PACKAGE_VERSIONS.ID, Packages.PACKAGES.PACKAGE_NAME, Packages.PACKAGES.PROJECT_NAME, PackageVersions.PACKAGE_VERSIONS.VERSION).from(Packages.PACKAGES).join(PackageVersions.PACKAGE_VERSIONS).on(PackageVersions.PACKAGE_VERSIONS.PACKAGE_ID.eq(Packages.PACKAGES.ID)).where(Packages.PACKAGES.PACKAGE_NAME.like("%:" + name[1]).and(PackageVersions.PACKAGE_VERSIONS.VERSION.equal(name[2]))).fetch());
+//					System.err.println(connector.select(Packages.PACKAGES.PACKAGE_NAME, PackageVersions.PACKAGE_VERSIONS.VERSION).from(Packages.PACKAGES).join(PackageVersions.PACKAGE_VERSIONS).on(PackageVersions.PACKAGE_VERSIONS.ID.eq(Packages.PACKAGES.ID)).where(Packages.PACKAGES.PACKAGE_NAME.equal(name[1])).fetch());
 					// revision =
 					continue;
 				} else if (q.startsWith("$context")) {
