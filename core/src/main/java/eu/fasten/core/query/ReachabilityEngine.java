@@ -137,7 +137,7 @@ public class ReachabilityEngine {
 						continue;
 					}
 					System.err.println("Selecting package " + name[0]);
-					System.err.println(connector.select().from(Packages.PACKAGES).join(PackageVersions.PACKAGE_VERSIONS).on(PackageVersions.PACKAGE_VERSIONS.ID.eq(Packages.PACKAGES.ID)).where(Packages.PACKAGES.PACKAGE_NAME.equal(name[0])));
+					System.err.println(connector.select(Packages.PACKAGES.PACKAGE_NAME, PackageVersions.PACKAGE_VERSIONS.VERSION).from(Packages.PACKAGES).join(PackageVersions.PACKAGE_VERSIONS).on(PackageVersions.PACKAGE_VERSIONS.ID.eq(Packages.PACKAGES.ID)).where(Packages.PACKAGES.PACKAGE_NAME.equal(name[0])).fetch());
 					// revision =
 					continue;
 				} else if (q.startsWith("$context")) {
