@@ -27,6 +27,8 @@ import java.sql.SQLException;
 import java.util.Collection;
 
 import org.jooq.DSLContext;
+import org.jooq.Record4;
+import org.jooq.Result;
 import org.jooq.SQLDialect;
 import org.jooq.impl.DSL;
 import org.json.JSONException;
@@ -44,6 +46,7 @@ import com.martiansoftware.jsap.UnflaggedOption;
 
 import eu.fasten.core.data.FastenURI;
 import eu.fasten.core.data.KnowledgeBase;
+import eu.fasten.core.data.graphdb.CallGraphData;
 import eu.fasten.core.data.graphdb.RocksDao;
 import eu.fasten.core.data.metadatadb.codegen.tables.PackageVersions;
 import eu.fasten.core.data.metadatadb.codegen.tables.Packages;
@@ -139,7 +142,11 @@ public class ReachabilityEngine {
 					}
 					System.err.println("Selecting package " + name[1] + ", version " + name[2]);
 //					System.err.println(connector.select(Packages.PACKAGES.PACKAGE_NAME, PackageVersions.PACKAGE_VERSIONS.VERSION).from(Packages.PACKAGES).join(PackageVersions.PACKAGE_VERSIONS).on(PackageVersions.PACKAGE_VERSIONS.ID.eq(Packages.PACKAGES.ID)).fetch());
-					System.err.println(connector.select(PackageVersions.PACKAGE_VERSIONS.ID, Packages.PACKAGES.PACKAGE_NAME, Packages.PACKAGES.PROJECT_NAME, PackageVersions.PACKAGE_VERSIONS.VERSION).from(Packages.PACKAGES).join(PackageVersions.PACKAGE_VERSIONS).on(PackageVersions.PACKAGE_VERSIONS.PACKAGE_ID.eq(Packages.PACKAGES.ID)).where(Packages.PACKAGES.PACKAGE_NAME.like("%:" + name[1]).and(PackageVersions.PACKAGE_VERSIONS.VERSION.equal(name[2]))).fetch());
+					final Result<Record4<Long, String, String, String>> result = connector.select(PackageVersions.PACKAGE_VERSIONS.ID, Packages.PACKAGES.PACKAGE_NAME, Packages.PACKAGES.PROJECT_NAME, PackageVersions.PACKAGE_VERSIONS.VERSION).from(Packages.PACKAGES).join(PackageVersions.PACKAGE_VERSIONS).on(PackageVersions.PACKAGE_VERSIONS.PACKAGE_ID.eq(Packages.PACKAGES.ID)).where(Packages.PACKAGES.PACKAGE_NAME.like("%:" + name[1]).and(PackageVersions.PACKAGE_VERSIONS.VERSION.equal(name[2]))).fetch();
+					System.err.println(result);
+					final long index = ((Long)(result.getValue(0, 0))).longValue();
+					final CallGraphData graphData = kb.getGraphData(index);
+					System.err.println("Graph has " + graphData.numNodes() + " nodes, " + graphData.numArcs() + " arcs");
 //					System.err.println(connector.select(Packages.PACKAGES.PACKAGE_NAME, PackageVersions.PACKAGE_VERSIONS.VERSION).from(Packages.PACKAGES).join(PackageVersions.PACKAGE_VERSIONS).on(PackageVersions.PACKAGE_VERSIONS.ID.eq(Packages.PACKAGES.ID)).where(Packages.PACKAGES.PACKAGE_NAME.equal(name[1])).fetch());
 					// revision =
 					continue;
