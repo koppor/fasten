@@ -188,11 +188,13 @@ public class ReachabilityEngine {
 						System.err.println("No results in metadata database");
 						continue;
 					}
+					final Timestamp timestamp = new Timestamp(System.currentTimeMillis());
 					System.err.println(result);
 					final long index = ((Long)(result.getValue(0, 0))).longValue();
 					final CallGraphData graphData = kb.getGraphData(index);
 					if (graphData == null) System.err.println("No data for index " + index);
 					else System.err.println("Graph has " + graphData.numNodes() + " nodes, " + graphData.numArcs() + " arcs");
+					System.err.println(getDeps(connector, timestamp, index));
 //					System.err.println(connector.select(Packages.PACKAGES.PACKAGE_NAME, PackageVersions.PACKAGE_VERSIONS.VERSION).from(Packages.PACKAGES).join(PackageVersions.PACKAGE_VERSIONS).on(PackageVersions.PACKAGE_VERSIONS.ID.eq(Packages.PACKAGES.ID)).where(Packages.PACKAGES.PACKAGE_NAME.equal(name[1])).fetch());
 					// revision =
 					continue;
