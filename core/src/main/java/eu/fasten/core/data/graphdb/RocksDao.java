@@ -28,7 +28,6 @@ import java.util.List;
 import java.util.Properties;
 import java.util.stream.Collectors;
 
-import it.unimi.dsi.fastutil.longs.*;
 import org.rocksdb.ColumnFamilyDescriptor;
 import org.rocksdb.ColumnFamilyHandle;
 import org.rocksdb.ColumnFamilyOptions;
@@ -51,6 +50,11 @@ import eu.fasten.core.index.BVGraphSerializer;
 import eu.fasten.core.index.LayeredLabelPropagation;
 import it.unimi.dsi.Util;
 import it.unimi.dsi.fastutil.io.FastByteArrayOutputStream;
+import it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap;
+import it.unimi.dsi.fastutil.longs.LongArrayList;
+import it.unimi.dsi.fastutil.longs.LongIterators;
+import it.unimi.dsi.fastutil.longs.LongLinkedOpenHashSet;
+import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import it.unimi.dsi.io.InputBitStream;
 import it.unimi.dsi.io.NullInputStream;
 import it.unimi.dsi.lang.MutableString;
@@ -215,13 +219,14 @@ public class RocksDao implements Closeable {
      * Retrieves graph data from RocksDB database.
      *
      * @param index Index of the graph
-     * @return CallGraphData stored in the database
+     * @return CallGraphData stored in the database, or {@code null} if no data is available for the provided index.
      * @throws RocksDBException if there was problem retrieving data from RocksDB
      */
 	public CallGraphData getGraphData(final long index)
             throws RocksDBException {
         final byte[] buffer = rocksDb.get(Longs.toByteArray(index));
-        final Input input = new Input(buffer);
+        if (buffer == null) return null;
+		final Input input = new Input(buffer);
         assert kryo != null;
 		final boolean compressed = kryo.readObject(input, Boolean.class).booleanValue();
 
