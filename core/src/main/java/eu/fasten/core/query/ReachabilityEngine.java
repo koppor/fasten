@@ -24,9 +24,11 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.sql.DriverManager;
 import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.util.Collection;
 
 import org.jooq.DSLContext;
+import org.jooq.Record1;
 import org.jooq.Record4;
 import org.jooq.Result;
 import org.jooq.SQLDialect;
@@ -48,8 +50,11 @@ import eu.fasten.core.data.FastenURI;
 import eu.fasten.core.data.KnowledgeBase;
 import eu.fasten.core.data.graphdb.CallGraphData;
 import eu.fasten.core.data.graphdb.RocksDao;
+import eu.fasten.core.data.metadatadb.codegen.tables.Dependencies;
 import eu.fasten.core.data.metadatadb.codegen.tables.PackageVersions;
 import eu.fasten.core.data.metadatadb.codegen.tables.Packages;
+import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
+import it.unimi.dsi.fastutil.longs.LongSet;
 
 /**
  * A sample reachability engine, collecting
@@ -104,6 +109,19 @@ public class ReachabilityEngine {
 		public Collection<FastenURI> execute(final KnowledgeBase kb) {
 			return kb.coreaches(fastenURI);
 		}
+	}
+
+	public static LongSet getDeps(final DSLContext connector, final Timestamp timestamp, final long index) {
+		final Record1<Long> result = connector.select(PackageVersions.PACKAGE_VERSIONS.ID)
+				.from(PackageVersions.PACKAGE_VERSIONS)
+				.join(Dependencies.DEPENDENCIES)
+				.on(Dependencies.DEPENDENCIES.DEPENDENCY_ID.eq(PackageVersions.PACKAGE_VERSIONS.PACKAGE_ID))
+				.where(PackageVersions.PACKAGE_VERSIONS.PACKAGE_ID.equal(Long.valueOf(index)).and(PackageVersions.PACKAGE_VERSIONS.CREATED_AT.ge(timestamp)))
+				.orderBy(PackageVersions.PACKAGE_VERSIONS.CREATED_AT)
+				.fetchOne();
+		final var s = new LongOpenHashSet();
+		for (int i = 0; i < result.size(); i++) s.add(((Long)result.getValue(i)).longValue());
+		return s;
 	}
 
 	public static void main(final String[] args) throws JSONException, IOException, ClassNotFoundException, JSAPException, RocksDBException, IllegalArgumentException, SQLException {
