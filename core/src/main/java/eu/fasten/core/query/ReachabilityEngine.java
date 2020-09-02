@@ -18,6 +18,8 @@
 
 package eu.fasten.core.query;
 
+import static org.jooq.impl.DSL.replace;
+
 import java.io.BufferedReader;
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -112,6 +114,25 @@ public class ReachabilityEngine {
 	}
 
 	public static LongSet getDeps(final DSLContext connector, final Timestamp timestamp, final long index) {
+		final Result<Record1<String>> wrongNames = connector.select(Packages.PACKAGES.PACKAGE_NAME)
+				.from(Packages.PACKAGES)
+				.join(Dependencies.DEPENDENCIES)
+				.on(Dependencies.DEPENDENCIES.DEPENDENCY_ID.eq(Packages.PACKAGES.ID)).fetch();
+
+		for(int i = 0; i < wrongNames.size(); i++) {
+			final String wrongName = (String)wrongNames.getValue(i, 0);
+			final Result<Record1<String>> rightName = connector.select(Packages.PACKAGES.PACKAGE_NAME)
+					.from(Packages.PACKAGES)
+					.where(replace(Packages.PACKAGES.PACKAGE_NAME, ":", ".").equal(wrongName)).fetch();
+			System.err.println(wrongName + " " + rightName);
+
+		}
+/*
+
+				.where(Dependencies.DEPENDENCIES.PACKAGE_VERSION_ID.equal(Long.valueOf(index)).and(PackageVersions.PACKAGE_VERSIONS.CREATED_AT.ge(timestamp)))
+				.orderBy(PackageVersions.PACKAGE_VERSIONS.CREATED_AT)
+				.fetchOne();
+
 		final Record1<Long> result = connector.select(PackageVersions.PACKAGE_VERSIONS.ID)
 				.from(PackageVersions.PACKAGE_VERSIONS)
 				.join(Dependencies.DEPENDENCIES)
@@ -119,8 +140,9 @@ public class ReachabilityEngine {
 				.where(PackageVersions.PACKAGE_VERSIONS.PACKAGE_ID.equal(Long.valueOf(index)).and(PackageVersions.PACKAGE_VERSIONS.CREATED_AT.ge(timestamp)))
 				.orderBy(PackageVersions.PACKAGE_VERSIONS.CREATED_AT)
 				.fetchOne();
+*/
 		final var s = new LongOpenHashSet();
-		for (int i = 0; i < result.size(); i++) s.add(((Long)result.getValue(i)).longValue());
+		// for (int i = 0; i < result.size(); i++) s.add(((Long)result.getValue(i)).longValue());
 		return s;
 	}
 
