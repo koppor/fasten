@@ -27,10 +27,12 @@ import java.io.InputStreamReader;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.util.ArrayList;
 import java.util.Collection;
 
 import org.jooq.DSLContext;
 import org.jooq.Record1;
+import org.jooq.Record2;
 import org.jooq.Record4;
 import org.jooq.Result;
 import org.jooq.SQLDialect;
@@ -113,38 +115,71 @@ public class ReachabilityEngine {
 		}
 	}
 
-	public static LongSet getDeps(final DSLContext connector, final Timestamp timestamp, final long index) {
-		final Result<Record1<String>> wrongNames = connector.select(Packages.PACKAGES.PACKAGE_NAME)
+	public static LongOpenHashSet getDeps(final DSLContext connector, final Timestamp timestamp, final long index) {
+		System.err.println("*");
+		final Result<Record2<Long, String>> wrongNames = connector.select(Packages.PACKAGES.ID, Packages.PACKAGES.PACKAGE_NAME)
 				.from(Packages.PACKAGES)
 				.join(Dependencies.DEPENDENCIES)
-				.on(Dependencies.DEPENDENCIES.DEPENDENCY_ID.eq(Packages.PACKAGES.ID)).fetch();
+				.on(Dependencies.DEPENDENCIES.DEPENDENCY_ID.eq(Packages.PACKAGES.ID))
+				.where(Dependencies.DEPENDENCIES.PACKAGE_VERSION_ID.equal(Long.valueOf(index)))
+				.fetch();
 
+		//System.err.prientln("Found " + wrongNames.size() + " depenencies");
+		final var rightIds = new LongOpenHashSet();
 		for(int i = 0; i < wrongNames.size(); i++) {
-			final String wrongName = (String)wrongNames.getValue(i, 0);
-			final Result<Record1<String>> rightName = connector.select(Packages.PACKAGES.PACKAGE_NAME)
+			//System.err.println("Looking for " + wrongNames.getValue(i, 1));
+			final long wrongId = (Long)wrongNames.getValue(i, 0);
+			final String wrongName = (String)wrongNames.getValue(i, 1);
+			final Result<Record2<Long, String>> rightName = connector.select(Packages.PACKAGES.ID, Packages.PACKAGES.PACKAGE_NAME)
 					.from(Packages.PACKAGES)
-					.where(replace(Packages.PACKAGES.PACKAGE_NAME, ":", ".").equal(wrongName)).fetch();
-			System.err.println(wrongName + " " + rightName);
-
+					.where(replace(Packages.PACKAGES.PACKAGE_NAME, ":", ".").equal(wrongName).and(Packages.PACKAGES.ID.notEqual(wrongId))).fetch();
+			if (rightName.size() > 0) rightIds.add(((Long)rightName.getValue(0, 0)).longValue());
+			//else System.err.println("Wrong result size: " + rightName.size());
 		}
-/*
 
-				.where(Dependencies.DEPENDENCIES.PACKAGE_VERSION_ID.equal(Long.valueOf(index)).and(PackageVersions.PACKAGE_VERSIONS.CREATED_AT.ge(timestamp)))
-				.orderBy(PackageVersions.PACKAGE_VERSIONS.CREATED_AT)
-				.fetchOne();
+		final var result = new LongOpenHashSet();
+		for(long rightId: rightIds) {
+			final Record1<Long> dep = connector.select(PackageVersions.PACKAGE_VERSIONS.ID)
+					.from(PackageVersions.PACKAGE_VERSIONS)
+					.join(Packages.PACKAGES)
+					.on(Packages.PACKAGES.ID.eq(PackageVersions.PACKAGE_VERSIONS.PACKAGE_ID))
+					.where(Packages.PACKAGES.ID.equal(Long.valueOf(rightId)).and(PackageVersions.PACKAGE_VERSIONS.CREATED_AT.le(timestamp)))
+					.orderBy(PackageVersions.PACKAGE_VERSIONS.CREATED_AT.desc())
+					.limit(1)
+					.fetchOne();
+			if (dep != null) result.add(((Long)dep.getValue(0, 0)).longValue());
+			else System.err.println("No revisions for product id " + rightId);
+		}
 
-		final Record1<Long> result = connector.select(PackageVersions.PACKAGE_VERSIONS.ID)
-				.from(PackageVersions.PACKAGE_VERSIONS)
-				.join(Dependencies.DEPENDENCIES)
-				.on(Dependencies.DEPENDENCIES.DEPENDENCY_ID.eq(PackageVersions.PACKAGE_VERSIONS.PACKAGE_ID))
-				.where(PackageVersions.PACKAGE_VERSIONS.PACKAGE_ID.equal(Long.valueOf(index)).and(PackageVersions.PACKAGE_VERSIONS.CREATED_AT.ge(timestamp)))
-				.orderBy(PackageVersions.PACKAGE_VERSIONS.CREATED_AT)
-				.fetchOne();
-*/
-		final var s = new LongOpenHashSet();
-		// for (int i = 0; i < result.size(); i++) s.add(((Long)result.getValue(i)).longValue());
-		return s;
+		/*for(long dep: result) {
+			System.err.println(connector.select().from(PackageVersions.PACKAGE_VERSIONS).join(Packages.PACKAGES).onKey().where(PackageVersions.PACKAGE_VERSIONS.ID.eq(dep)).fetch());
+		}*/
+		return result;
 	}
+
+	public static LongSet getAllDeps(final DSLContext connector, final Timestamp timestamp, final long index) {
+		final var result = getDeps(connector, timestamp, index);
+		int currSize;
+		do {
+			currSize = result.size();
+			final var add = result.clone();
+			for(long id: result) add.addAll(getDeps(connector, timestamp, id));
+			result.addAll(add);
+		} while (currSize == result.size());
+		return result;
+	}
+
+	public static String getName(final DSLContext connector, final long index) {	
+		final Result<Record2<String,String>> result = connector.select(Packages.PACKAGES.PACKAGE_NAME, PackageVersions.PACKAGE_VERSIONS.VERSION).from(PackageVersions.PACKAGE_VERSIONS).join(Packages.PACKAGES).onKey().where(PackageVersions.PACKAGE_VERSIONS.ID.eq(index)).fetch();
+		return result.getValue(0, 0) + " " + result.getValue(0, 1);
+	}
+
+	public static ArrayList<String> getNames(final DSLContext connector, final LongSet s) {	
+		var result = new ArrayList<String>();
+		for(long id: s) result.add(getName(connector, id));
+		return result;
+	}
+
 
 	public static void main(final String[] args) throws JSONException, IOException, ClassNotFoundException, JSAPException, RocksDBException, IllegalArgumentException, SQLException {
 		final SimpleJSAP jsap = new SimpleJSAP(ReachabilityEngine.class.getName(), "Searches a given knowledge base (associated to a database)", new Parameter[] {
@@ -194,7 +229,8 @@ public class ReachabilityEngine {
 					final CallGraphData graphData = kb.getGraphData(index);
 					if (graphData == null) System.err.println("No data for index " + index);
 					else System.err.println("Graph has " + graphData.numNodes() + " nodes, " + graphData.numArcs() + " arcs");
-					System.err.println(getDeps(connector, timestamp, index));
+					System.err.println(getNames(connector, getDeps(connector, timestamp, index)));
+					System.err.println(getNames(connector, getAllDeps(connector, timestamp, index)));
 //					System.err.println(connector.select(Packages.PACKAGES.PACKAGE_NAME, PackageVersions.PACKAGE_VERSIONS.VERSION).from(Packages.PACKAGES).join(PackageVersions.PACKAGE_VERSIONS).on(PackageVersions.PACKAGE_VERSIONS.ID.eq(Packages.PACKAGES.ID)).where(Packages.PACKAGES.PACKAGE_NAME.equal(name[1])).fetch());
 					// revision =
 					continue;
