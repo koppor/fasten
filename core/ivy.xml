@@ -20,6 +20,11 @@
 		<dependency org="org.slf4j" name="slf4j-api" rev="latest.release"/>
 		<dependency org="org.pf4j" name="pf4j" rev="3.1.0"/>
 		<dependency org="ch.qos.logback" name="logback-classic" rev="latest.release" conf="runtime"/>
+		<dependency org="org.jgrapht" name="jgrapht-core" rev="latest.release"/>
+		<dependency org="org.postgresql" name="postgresql" rev="9.4.1208"/>
 		<dependency org="net.javacrumbs.json-unit" name="json-unit" rev="latest.release"/>
+            <!-- This dependency can be removed once jOOQ v3.15 is out,
+                because the required functionality will be implemented there -->
+		<dependency org="com.github.t9t.jooq" name="jooq-postgresql-json" rev="1.0.0"/>
 	</dependencies>
 </ivy-module>
