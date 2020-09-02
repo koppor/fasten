@@ -160,11 +160,17 @@ public class ReachabilityEngine {
 					}
 					System.err.println("Selecting package " + name[1] + ", version " + name[2]);
 //					System.err.println(connector.select(Packages.PACKAGES.PACKAGE_NAME, PackageVersions.PACKAGE_VERSIONS.VERSION).from(Packages.PACKAGES).join(PackageVersions.PACKAGE_VERSIONS).on(PackageVersions.PACKAGE_VERSIONS.ID.eq(Packages.PACKAGES.ID)).fetch());
-					final Result<Record4<Long, String, String, String>> result = connector.select(PackageVersions.PACKAGE_VERSIONS.ID, Packages.PACKAGES.PACKAGE_NAME, Packages.PACKAGES.PROJECT_NAME, PackageVersions.PACKAGE_VERSIONS.VERSION).from(Packages.PACKAGES).join(PackageVersions.PACKAGE_VERSIONS).on(PackageVersions.PACKAGE_VERSIONS.PACKAGE_ID.eq(Packages.PACKAGES.ID)).where(Packages.PACKAGES.PACKAGE_NAME.like("%:" + name[1]).and(PackageVersions.PACKAGE_VERSIONS.VERSION.equal(name[2]))).fetch();
+					final Result<Record4<Long, String, String, String>> result = connector.select(PackageVersions.PACKAGE_VERSIONS.ID, Packages.PACKAGES.PACKAGE_NAME, Packages.PACKAGES.PROJECT_NAME, PackageVersions.PACKAGE_VERSIONS.VERSION).from(Packages.PACKAGES).join(PackageVersions.PACKAGE_VERSIONS).on(PackageVersions.PACKAGE_VERSIONS.PACKAGE_ID.eq(Packages.PACKAGES.ID)).where(Packages.PACKAGES.PACKAGE_NAME.equal(name[1]).and(PackageVersions.PACKAGE_VERSIONS.VERSION.equal(name[2]))).fetch();
+//					final Result<Record4<Long, String, String, String>> result = connector.select(PackageVersions.PACKAGE_VERSIONS.ID, Packages.PACKAGES.PACKAGE_NAME, Packages.PACKAGES.PROJECT_NAME, PackageVersions.PACKAGE_VERSIONS.VERSION).from(Packages.PACKAGES).join(PackageVersions.PACKAGE_VERSIONS).on(PackageVersions.PACKAGE_VERSIONS.PACKAGE_ID.eq(Packages.PACKAGES.ID)).where(Packages.PACKAGES.PACKAGE_NAME.like("%" + name[1] + "%")).fetch();
+					if (result.size() == 0) {
+						System.err.println("No results in metadata database");
+						continue;
+					}
 					System.err.println(result);
 					final long index = ((Long)(result.getValue(0, 0))).longValue();
 					final CallGraphData graphData = kb.getGraphData(index);
-					System.err.println("Graph has " + graphData.numNodes() + " nodes, " + graphData.numArcs() + " arcs");
+					if (graphData == null) System.err.println("No data for index " + index);
+					else System.err.println("Graph has " + graphData.numNodes() + " nodes, " + graphData.numArcs() + " arcs");
 //					System.err.println(connector.select(Packages.PACKAGES.PACKAGE_NAME, PackageVersions.PACKAGE_VERSIONS.VERSION).from(Packages.PACKAGES).join(PackageVersions.PACKAGE_VERSIONS).on(PackageVersions.PACKAGE_VERSIONS.ID.eq(Packages.PACKAGES.ID)).where(Packages.PACKAGES.PACKAGE_NAME.equal(name[1])).fetch());
 					// revision =
 					continue;
