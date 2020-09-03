@@ -54,11 +54,19 @@ import eu.fasten.core.data.FastenURI;
 import eu.fasten.core.data.KnowledgeBase;
 import eu.fasten.core.data.graphdb.CallGraphData;
 import eu.fasten.core.data.graphdb.RocksDao;
+import eu.fasten.core.data.metadatadb.codegen.tables.Callables;
 import eu.fasten.core.data.metadatadb.codegen.tables.Dependencies;
+import eu.fasten.core.data.metadatadb.codegen.tables.Modules;
 import eu.fasten.core.data.metadatadb.codegen.tables.PackageVersions;
 import eu.fasten.core.data.metadatadb.codegen.tables.Packages;
+import it.unimi.dsi.fastutil.longs.Long2LongMap;
+import it.unimi.dsi.fastutil.longs.Long2LongOpenHashMap;
+import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
+import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import it.unimi.dsi.fastutil.longs.LongSet;
+import it.unimi.dsi.fastutil.objects.Object2LongMap;
+import it.unimi.dsi.fastutil.objects.Object2LongOpenHashMap;
 
 /**
  * A sample reachability engine, collecting
@@ -117,7 +125,7 @@ public class ReachabilityEngine {
 
 	public static LongOpenHashSet getDeps(final DSLContext connector, final Timestamp timestamp, final long index) {
 		System.err.println("*");
-		final Result<Record2<Long, String>> wrongNames = connector.select(Packages.PACKAGES.ID, Packages.PACKAGES.PACKAGE_NAME)
+		final Result<Record2<Long, String>> wrongData = connector.select(Packages.PACKAGES.ID, Packages.PACKAGES.PACKAGE_NAME)
 				.from(Packages.PACKAGES)
 				.join(Dependencies.DEPENDENCIES)
 				.on(Dependencies.DEPENDENCIES.DEPENDENCY_ID.eq(Packages.PACKAGES.ID))
@@ -126,10 +134,10 @@ public class ReachabilityEngine {
 
 		//System.err.prientln("Found " + wrongNames.size() + " depenencies");
 		final var rightIds = new LongOpenHashSet();
-		for(int i = 0; i < wrongNames.size(); i++) {
+		for (final var wrongDatum : wrongData) {
 			//System.err.println("Looking for " + wrongNames.getValue(i, 1));
-			final long wrongId = (Long)wrongNames.getValue(i, 0);
-			final String wrongName = (String)wrongNames.getValue(i, 1);
+			final long wrongId = (Long)wrongDatum.getValue(0);
+			final String wrongName = (String)wrongDatum.getValue(1);
 			final Result<Record2<Long, String>> rightName = connector.select(Packages.PACKAGES.ID, Packages.PACKAGES.PACKAGE_NAME)
 					.from(Packages.PACKAGES)
 					.where(replace(Packages.PACKAGES.PACKAGE_NAME, ":", ".").equal(wrongName).and(Packages.PACKAGES.ID.notEqual(wrongId))).fetch();
@@ -138,7 +146,7 @@ public class ReachabilityEngine {
 		}
 
 		final var result = new LongOpenHashSet();
-		for(long rightId: rightIds) {
+		for(final long rightId: rightIds) {
 			final Record1<Long> dep = connector.select(PackageVersions.PACKAGE_VERSIONS.ID)
 					.from(PackageVersions.PACKAGE_VERSIONS)
 					.join(Packages.PACKAGES)
@@ -163,20 +171,43 @@ public class ReachabilityEngine {
 		do {
 			currSize = result.size();
 			final var add = result.clone();
-			for(long id: result) add.addAll(getDeps(connector, timestamp, id));
+			for(final long id: result) add.addAll(getDeps(connector, timestamp, id));
 			result.addAll(add);
 		} while (currSize == result.size());
 		return result;
 	}
 
-	public static String getName(final DSLContext connector, final long index) {	
-		final Result<Record2<String,String>> result = connector.select(Packages.PACKAGES.PACKAGE_NAME, PackageVersions.PACKAGE_VERSIONS.VERSION).from(PackageVersions.PACKAGE_VERSIONS).join(Packages.PACKAGES).onKey().where(PackageVersions.PACKAGE_VERSIONS.ID.eq(index)).fetch();
+	@SuppressWarnings("boxing")
+	public static void getMethods(final DSLContext connector, final LongSet revisions, final Long2ObjectMap<LongSet> revision2Callables, final Long2LongMap callable2revision, final Long2ObjectMap<String> index2URI, final Object2LongMap<String> uri2Index) {
+		for (final long revision : revisions) {
+			final Result<Record2<Long, String>> callables = connector.select(Callables.CALLABLES.ID, Callables.CALLABLES.FASTEN_URI)
+					.from(Callables.CALLABLES)
+					.join(Modules.MODULES).onKey()
+					.join(PackageVersions.PACKAGE_VERSIONS).onKey()
+					.where(PackageVersions.PACKAGE_VERSIONS.ID.equal(Long.valueOf(revision)))
+					.fetch();
+
+			final var s = new LongOpenHashSet();
+			revision2Callables.put(revision, s);
+			for (final Record2<Long, String> callable : callables) {
+				final long index = (Long)callable.getValue(0);
+				final String uri = (String)callable.getValue(1);
+				index2URI.put(index, uri);
+				uri2Index.put(uri, index);
+				callable2revision.put(index, revision);
+				s.add(index);
+			}
+		}
+	}
+
+	public static String getRevisionName(final DSLContext connector, final long revision) {
+		final Result<Record2<String, String>> result = connector.select(Packages.PACKAGES.PACKAGE_NAME, PackageVersions.PACKAGE_VERSIONS.VERSION).from(PackageVersions.PACKAGE_VERSIONS).join(Packages.PACKAGES).onKey().where(PackageVersions.PACKAGE_VERSIONS.ID.eq(revision)).fetch();
 		return result.getValue(0, 0) + " " + result.getValue(0, 1);
 	}
 
-	public static ArrayList<String> getNames(final DSLContext connector, final LongSet s) {	
-		var result = new ArrayList<String>();
-		for(long id: s) result.add(getName(connector, id));
+	public static ArrayList<String> getRevisionNames(final DSLContext connector, final LongSet revisions) {
+		final var result = new ArrayList<String>();
+		for (final long revision : revisions) result.add(getRevisionName(connector, revision));
 		return result;
 	}
 
@@ -199,6 +230,11 @@ public class ReachabilityEngine {
 
 		final String revision = null;
 		final String context = null;
+
+		final Long2ObjectMap<LongSet> revision2Callables = new Long2ObjectOpenHashMap<>();
+		final Long2LongMap callable2revision = new Long2LongOpenHashMap();
+		final Long2ObjectMap<String> index2URI = new Long2ObjectOpenHashMap<>();
+		final Object2LongMap<String> uri2Index = new Object2LongOpenHashMap<>();
 
 		for (;;) {
 			System.out.print(">");
@@ -229,10 +265,20 @@ public class ReachabilityEngine {
 					final CallGraphData graphData = kb.getGraphData(index);
 					if (graphData == null) System.err.println("No data for index " + index);
 					else System.err.println("Graph has " + graphData.numNodes() + " nodes, " + graphData.numArcs() + " arcs");
-					System.err.println(getNames(connector, getDeps(connector, timestamp, index)));
-					System.err.println(getNames(connector, getAllDeps(connector, timestamp, index)));
-//					System.err.println(connector.select(Packages.PACKAGES.PACKAGE_NAME, PackageVersions.PACKAGE_VERSIONS.VERSION).from(Packages.PACKAGES).join(PackageVersions.PACKAGE_VERSIONS).on(PackageVersions.PACKAGE_VERSIONS.ID.eq(Packages.PACKAGES.ID)).where(Packages.PACKAGES.PACKAGE_NAME.equal(name[1])).fetch());
-					// revision =
+					System.err.println(getRevisionNames(connector, getDeps(connector, timestamp, index)));
+					final LongSet deps = getAllDeps(connector, timestamp, index);
+					System.err.println(getRevisionNames(connector, deps));
+					revision2Callables.clear();
+					callable2revision.clear();
+					index2URI.clear();
+					uri2Index.clear();
+					getMethods(connector, deps, revision2Callables, callable2revision, index2URI, uri2Index);
+					for (final Long2ObjectMap.Entry<LongSet> e : revision2Callables.long2ObjectEntrySet()) {
+						System.err.println(getRevisionName(connector, e.getLongKey()));
+						for(final long l: e.getValue())
+							System.err.println("\t" + index2URI.get(l));
+						System.err.println();
+					}
 					continue;
 				} else if (q.startsWith("$context")) {
 					// TODO
