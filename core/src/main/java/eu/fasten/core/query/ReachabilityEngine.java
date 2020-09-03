@@ -181,7 +181,7 @@ public class ReachabilityEngine {
 		for (final long revision : revisions) {
 			final CallGraphData callGraphData = kb.getGraphData(revision);
 			if (callGraphData == null) {
-				System.err.println("No data for index " + revision);
+				if (callGraphData == null) System.err.println("No graph data for revision " + revision + " (" + getRevisionName(connector, revision) + ")");
 				continue;
 			}
 
@@ -267,7 +267,7 @@ public class ReachabilityEngine {
 					System.err.println(result);
 					final long index = ((Long)(result.getValue(0, 0))).longValue();
 					callGraphData = kb.getGraphData(index);
-					if (callGraphData == null) System.err.println("No data for index " + index);
+					if (callGraphData == null) System.err.println("No graph data for revision " + index + " (" + getRevisionName(connector, index) + ")");
 					else System.err.println("Graph has " + callGraphData.numNodes() + " nodes, " + callGraphData.numArcs() + " arcs");
 					System.err.println(getRevisionNames(connector, getDeps(connector, timestamp, index)));
 					final LongSet deps = getAllDeps(connector, timestamp, index);
