@@ -123,7 +123,6 @@ public class ReachabilityEngine {
 	}
 
 	public static LongOpenHashSet getDeps(final DSLContext connector, final Timestamp timestamp, final long index) {
-		System.err.println("*");
 		final Result<Record2<Long, String>> wrongData = connector.select(Packages.PACKAGES.ID, Packages.PACKAGES.PACKAGE_NAME)
 				.from(Packages.PACKAGES)
 				.join(Dependencies.DEPENDENCIES)
@@ -155,7 +154,7 @@ public class ReachabilityEngine {
 					.limit(1)
 					.fetchOne();
 			if (dep != null) result.add(((Long)dep.getValue(0, 0)).longValue());
-			else System.err.println("No revisions for product id " + rightId);
+			else System.err.println("No revisions for product id " + rightId + " (" + connector.select(Packages.PACKAGES.PACKAGE_NAME).from(Packages.PACKAGES).where(Packages.PACKAGES.ID.eq(rightId)).fetchOne().getValue(0) + ")");
 		}
 
 		/*for(long dep: result) {
@@ -269,10 +268,11 @@ public class ReachabilityEngine {
 					callGraphData = kb.getGraphData(index);
 					if (callGraphData == null) System.err.println("No graph data for revision " + index + " (" + getRevisionName(connector, index) + ")");
 					else System.err.println("Graph has " + callGraphData.numNodes() + " nodes, " + callGraphData.numArcs() + " arcs");
-					System.err.println(getRevisionNames(connector, getDeps(connector, timestamp, index)));
+					System.err.println();
+					System.err.println("Source dependencies: " + getRevisionNames(connector, getDeps(connector, timestamp, index)));
 					final LongSet deps = getAllDeps(connector, timestamp, index);
-					System.err.println(getRevisionNames(connector, deps));
-
+					System.err.println("Resolved dependencies: " + getRevisionNames(connector, deps));
+					System.err.println();
 					index2CallGraphData.clear();
 					revision2Callables.clear();
 					callable2revision.clear();
@@ -281,8 +281,11 @@ public class ReachabilityEngine {
 					getMethods(kb, connector, deps, index2CallGraphData, revision2Callables, callable2revision, index2URI, uri2Index);
 					for (final Long2ObjectMap.Entry<LongSet> e : revision2Callables.long2ObjectEntrySet()) {
 						System.err.println(getRevisionName(connector, e.getLongKey()));
-						for(final long l: e.getValue())
+						int i = 0;
+						for(final long l: e.getValue()) {
 							System.err.println("\t" + index2URI.get(l));
+							if (++i == 10) break;
+						}
 						System.err.println();
 					}
 					continue;
