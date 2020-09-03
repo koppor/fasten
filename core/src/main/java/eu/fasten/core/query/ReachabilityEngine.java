@@ -56,7 +56,6 @@ import eu.fasten.core.data.graphdb.CallGraphData;
 import eu.fasten.core.data.graphdb.RocksDao;
 import eu.fasten.core.data.metadatadb.codegen.tables.Callables;
 import eu.fasten.core.data.metadatadb.codegen.tables.Dependencies;
-import eu.fasten.core.data.metadatadb.codegen.tables.Modules;
 import eu.fasten.core.data.metadatadb.codegen.tables.PackageVersions;
 import eu.fasten.core.data.metadatadb.codegen.tables.Packages;
 import it.unimi.dsi.fastutil.longs.Long2LongMap;
@@ -178,20 +177,23 @@ public class ReachabilityEngine {
 	}
 
 	@SuppressWarnings("boxing")
-	public static void getMethods(final DSLContext connector, final LongSet revisions, final Long2ObjectMap<LongSet> revision2Callables, final Long2LongMap callable2revision, final Long2ObjectMap<String> index2URI, final Object2LongMap<String> uri2Index) {
+	public static void getMethods(final RocksDao kb, final DSLContext connector, final LongSet revisions, final Long2ObjectMap<CallGraphData> index2CallGraphData, final Long2ObjectMap<LongSet> revision2Callables, final Long2LongMap callable2revision, final Long2ObjectMap<String> index2URI, final Object2LongMap<String> uri2Index) throws RocksDBException {
 		for (final long revision : revisions) {
-			final Result<Record2<Long, String>> callables = connector.select(Callables.CALLABLES.ID, Callables.CALLABLES.FASTEN_URI)
-					.from(Callables.CALLABLES)
-					.join(Modules.MODULES).onKey()
-					.join(PackageVersions.PACKAGE_VERSIONS).onKey()
-					.where(PackageVersions.PACKAGE_VERSIONS.ID.equal(Long.valueOf(revision)))
-					.fetch();
+			final CallGraphData callGraphData = kb.getGraphData(revision);
+			if (callGraphData == null) {
+				System.err.println("No data for index " + revision);
+				continue;
+			}
 
 			final var s = new LongOpenHashSet();
 			revision2Callables.put(revision, s);
-			for (final Record2<Long, String> callable : callables) {
-				final long index = (Long)callable.getValue(0);
-				final String uri = (String)callable.getValue(1);
+			for (final long index : callGraphData.LID2GID) {
+				final Record1<String> result = connector.select(Callables.CALLABLES.FASTEN_URI).from(Callables.CALLABLES).where(Callables.CALLABLES.ID.eq(index)).fetchOne();
+				if (result == null) {
+					System.err.println("No URI for callable with index " + index);
+					continue;
+				}
+				final String uri = (String)result.getValue(0);
 				index2URI.put(index, uri);
 				uri2Index.put(uri, index);
 				callable2revision.put(index, revision);
@@ -231,10 +233,12 @@ public class ReachabilityEngine {
 		final String revision = null;
 		final String context = null;
 
+		CallGraphData callGraphData = null;
 		final Long2ObjectMap<LongSet> revision2Callables = new Long2ObjectOpenHashMap<>();
 		final Long2LongMap callable2revision = new Long2LongOpenHashMap();
 		final Long2ObjectMap<String> index2URI = new Long2ObjectOpenHashMap<>();
 		final Object2LongMap<String> uri2Index = new Object2LongOpenHashMap<>();
+		final Long2ObjectMap<CallGraphData> index2CallGraphData = new Long2ObjectOpenHashMap<>();
 
 		for (;;) {
 			System.out.print(">");
@@ -262,17 +266,19 @@ public class ReachabilityEngine {
 					final Timestamp timestamp = new Timestamp(System.currentTimeMillis());
 					System.err.println(result);
 					final long index = ((Long)(result.getValue(0, 0))).longValue();
-					final CallGraphData graphData = kb.getGraphData(index);
-					if (graphData == null) System.err.println("No data for index " + index);
-					else System.err.println("Graph has " + graphData.numNodes() + " nodes, " + graphData.numArcs() + " arcs");
+					callGraphData = kb.getGraphData(index);
+					if (callGraphData == null) System.err.println("No data for index " + index);
+					else System.err.println("Graph has " + callGraphData.numNodes() + " nodes, " + callGraphData.numArcs() + " arcs");
 					System.err.println(getRevisionNames(connector, getDeps(connector, timestamp, index)));
 					final LongSet deps = getAllDeps(connector, timestamp, index);
 					System.err.println(getRevisionNames(connector, deps));
+
+					index2CallGraphData.clear();
 					revision2Callables.clear();
 					callable2revision.clear();
 					index2URI.clear();
 					uri2Index.clear();
-					getMethods(connector, deps, revision2Callables, callable2revision, index2URI, uri2Index);
+					getMethods(kb, connector, deps, index2CallGraphData, revision2Callables, callable2revision, index2URI, uri2Index);
 					for (final Long2ObjectMap.Entry<LongSet> e : revision2Callables.long2ObjectEntrySet()) {
 						System.err.println(getRevisionName(connector, e.getLongKey()));
 						for(final long l: e.getValue())
